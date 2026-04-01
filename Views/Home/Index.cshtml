@@ -1,0 +1,124 @@
+﻿@{
+    ViewData["Title"] = "我的 AJAX 初體驗";
+}
+
+<style>
+    /* 容器要設定為 relative，遮罩才能精準定位在它裡面 */
+    .input-container {
+        position: relative;
+        display: inline-block;
+        /* 讓容器寬度隨內容縮放 */
+        padding: 20px;
+    }
+
+    #overlay {
+        display: none;
+        position: absolute;
+        /* 相對於 .input-container */
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(200, 200, 200, 0.5);
+        /* 淡淡的灰色，看起來像被停用 */
+        z-index: 10;
+        cursor: not-allowed;
+        border-radius: 8px;
+    }
+</style>
+
+<div class="text-center">
+    @await Html.PartialAsync("_EditSwitch")
+
+    <div class="input-container">
+        <div id="overlay" style="display: none;"></div>
+
+        <p>請輸入名字：</p>
+        <input type="text" id="userName" class="form-control" />
+
+        <div style="margin-top: 10px;">
+            <button id="btnSend" class="btn btn-primary">發送 AJAX</button>
+
+            <button id="btnReset" class="btn btn-outline-secondary">放棄並重整</button>
+        </div>
+    </div>
+
+    <hr />
+    <div id="displayArea" style="margin-top: 20px; padding: 15px; min-height: 50px;">
+        等待資料傳回...
+    </div>
+</div>
+
+
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            // 1. 先定義變數
+            var isDirty = false;
+
+            // ✨ 強制執行一次檢查，確保畫面與按鈕值一致
+            var currentMode = $('input[name="editMode"]:checked').val();
+            if (currentMode === 'Y') {
+                $("#overlay").hide();
+            } else {
+                $("#overlay").show();
+            }
+
+            // 2. 監聽輸入框：只要有字就標記為 Dirty
+            $("#userName").on("input", function () {
+                isDirty = $(this).val().trim() !== "";
+            });
+
+            // 3. 切換 Y/N 遮罩邏輯
+            $('input[name="editMode"]').change(function () {
+                var mode = $(this).val();
+                if (mode === 'Y') {
+                    $("#overlay").fadeOut(200);
+                } else {
+                    $("#overlay").fadeIn(200);
+                }
+            });
+
+            // 4. 重整按鈕邏輯 (修正後：包在 click 事件裡)
+            $("#btnReset").click(function () {
+                // 彈出警告視窗（只有一個「確定」按鈕）
+                alert("系統偵測到放棄行為，即將重新整理網頁！");
+
+                // 當使用者關閉上面那個 alert 後，這行就會執行
+                isDirty = false;
+                location.reload();
+            });
+
+            // 5. 發送 AJAX 邏輯
+            $("#btnSend").click(function () {
+                var nameVal = $("#userName").val();
+                $.ajax({
+                    url: '/Home/GetHelloData',
+                    type: 'POST',
+                    data: { name: nameVal },
+                    success: function (response) {
+                        isDirty = false; // 發送成功，重置狀態
+                        $("#displayArea").css("color", "green").html(
+                            "來自伺服器的回應：<br>" +
+                            "消息：" + response.message + "<br>" +
+                            "時間：" + response.serverTime
+                        );
+                    },
+                    error: function () {
+                        $("#displayArea").css("color", "red").text("連線失敗！");
+                    }
+                });
+            });
+
+            // 6. 監聽瀏覽器/分頁關閉事件
+            $(window).on("beforeunload", function (e) {
+                if (isDirty) {
+                    var message = "您有尚未發送的資料，確定要離開嗎？";
+                    e.preventDefault();
+                    e.returnValue = message;
+                    return message;
+                }
+            });
+        });
+    </script>
+}
