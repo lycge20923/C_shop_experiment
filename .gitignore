@@ -52,3 +52,18 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# --- [ Database Files ] ---
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# --- [ VS Code Settings ] ---
+.vscode/
+.history/
+
+# --- [ ASP.NET Core Secrets ] ---
+UserSecretsId
+[Aa]ppsettings.Development.json

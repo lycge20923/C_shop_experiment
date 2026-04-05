@@ -1,0 +1,187 @@
+@{
+    ViewData["Title"] = "訂單查詢系統";
+}
+
+<div class="container mt-4">
+    <div class="text-center mb-4">
+        <h2 class="display-6"><i class="bi bi-search"></i> 訂單查詢系統</h2>
+        <p class="text-muted">請輸入篩選條件進行檢索</p>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body bg-light">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">訂單號碼</label>
+                    <input type="text" id="searchOrderId" class="form-control" placeholder="例如：ORD-2026001" />
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label fw-bold">訂單關鍵字</label>
+                    <input type="text" id="searchOrderContent" class="form-control" placeholder="輸入產品名稱或備註..." />
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" id="btnSearch">
+                        <i class="bi bi-search"></i> 開始搜尋
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex justify-content-end mb-3">
+        <div class="btn-group">
+            <button class="btn btn-outline-success" id="btnAdd">新增訂單</button>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th>訂單號碼</th>
+                        <th>建立時間</th>
+                        <th>狀態</th>
+                    </tr>
+                </thead>
+                <tbody id="orderTableBody">
+                    <tr>
+                        <td colspan="3" class="text-center py-5 text-secondary">
+                            <i class="bi bi-info-circle"></i> 請輸入條件並點擊搜尋開始查詢
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            <div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header bg-primary text-white">
+                            <h5 class="modal-title">📦 訂單詳細資訊</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p><strong>訂單號碼：</strong> <span id="detailNum"></span></p>
+                            <p><strong>內容描述：</strong> <span id="detailContent"></span></p>
+                            <p><strong>建立時間：</strong> <span id="detailTime"></span></p>
+                            <p><strong>目前狀態：</strong> <span id="detailStatus" class="badge"></span></p>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        function showDetail(orderNum) {
+            console.log("點擊了：" + orderNum); // 測試有沒有觸發
+
+            $.ajax({
+                url: '/Order/GetOrderDetail',
+                type: 'GET',
+                data: { orderNumber: orderNum },
+                success: function (res) {
+                    console.log("後端回傳：", res);
+                    if (res) {
+                        $("#detailNum").text(res.orderNumber);
+                        $("#detailContent").text(res.content);
+                        $("#detailTime").text(res.createTime);
+                        $("#detailStatus").text(res.status).removeClass().addClass("badge bg-info text-dark");
+
+                        // 強制初始化並顯示
+                        var modalElement = document.getElementById('detailModal');
+                        var myModal = bootstrap.Modal.getOrCreateInstance(modalElement);
+                        myModal.show();
+                    }
+                },
+                error: function () {
+                    alert("無法取得詳細資訊，請確認 OrderController 是否有 GetOrderDetail 方法");
+                }
+            });
+        }
+        $(document).ready(function () {
+            // 1. 搜尋邏輯
+            $("#btnSearch").click(function () {
+                var orderId = $("#searchOrderId").val();
+                var content = $("#searchOrderContent").val();
+
+                // 顯示 Loading 動畫
+                $("#orderTableBody").html('<tr><td colspan="5" class="text-center py-4"><div class="spinner-border text-primary"></div> 搜尋中...</td></tr>');
+
+                // 發送 AJAX 到新的 OrderController
+                $.ajax({
+                    url: '/Order/SearchOrders', // 這裡要指向 OrderController
+                    type: 'POST',
+                    data: {
+                        orderId: orderId,
+                        content: content
+                    },
+                    success: function (data) {
+                        console.log("後端傳來的原始資料：", data); // 👈 檢查這行印出什麼
+                        var html = "";
+
+                        if (data.length === 0) {
+                            html = '<tr><td colspan="5" class="text-center py-4 text-danger">找不到符合條件的訂單</td></tr>';
+                        } else {
+                            // 跑迴圈把 JSON 資料渲染成 HTML 表格列
+                            $.each(data, function (i, item) {
+                                html += '<tr>' +
+                                    '<td>' +
+                                    '<a href="/Order/Details?id=' + item.orderNumber + '" class="fw-bold text-primary text-decoration-underline">' +
+                                    item.orderNumber +
+                                    '</a>' +
+                                    '</td>' +
+                                    '<td>' + item.createTime + '</td>' +
+                                    '<td><span class="badge bg-info text-dark">' + item.status + '</span></td>' +
+                                    '</tr>';
+                            });
+                        }
+                        // 更新表格內容
+                        $("#orderTableBody").hide().html(html).fadeIn(300);
+                    },
+                    error: function () {
+                        $("#orderTableBody").html('<tr><td colspan="5" class="text-center py-4 text-danger">連線失敗，請確認後端程式碼是否正確！</td></tr>');
+                    }
+                });
+            });
+
+            // 2. 全選功能 (小優化)
+            $("#checkAll").click(function () {
+                $(".order-check").prop('checked', $(this).prop('checked'));
+            });
+
+            // 3. 新增按鈕邏輯
+            $("#btnAdd").click(function () {
+                // 加上簡單的確認，避免誤點
+                if (!confirm("準備建立一筆新訂單，是否繼續？")) return;
+
+                var $btn = $(this);
+                $btn.prop("disabled", true).html('<span class="spinner-border spinner-border-sm"></span> 建立中...');
+
+                $.ajax({
+                    url: '/Order/CreateOrder', // 對應 Controller 中的 CreateOrder Action
+                    type: 'POST',
+                    success: function (res) {
+                        if (res.success) {
+                            // 成功建立後，直接導向該訂單的詳情(編輯)頁面
+                            // 注意：這裡的路徑要跟你的 Details Action 路由一致
+                            window.location.href = '/Order/Details/' + res.orderNumber;
+                        } else {
+                            alert("建立失敗：" + res.message);
+                            $btn.prop("disabled", false).text("新增訂單");
+                        }
+                    },
+                    error: function () {
+                        alert("伺服器連線失敗，請檢查網路或 Controller 邏輯");
+                        $btn.prop("disabled", false).text("新增訂單");
+                    }
+                });
+            });
+        });
+    </script>
+
+}
