@@ -36,5 +36,10 @@ namespace testweb.Hubs // 👈 檢查這裡！大小寫要完全一致
             }
             await base.OnDisconnectedAsync(exception);
         }
+        public async Task NotifyTakeoverComplete(string orderId, string newOwner)
+        {
+            // 廣播給該訂單群組：交接已完成
+            await Clients.Group(orderId).SendAsync("OnDataSynced", newOwner);
+        }
     }
 }

@@ -67,55 +67,26 @@ public class OrderController : Controller
     }
 
     // 1. 顯示訂單詳細頁面 (跳轉用)
-    public IActionResult Details(string id)
+    // 增加 autoEdit 參數，預設為 false
+    public IActionResult Details(string id, bool autoEdit = false)
     {
         var order = _db.Orders.Include(o => o.OrderItems)
                        .FirstOrDefault(o => o.OrderNumber == id);
 
         if (order == null) return NotFound();
 
-        // 1. 【確保使用者身分】
-        string currentUser = Request.Cookies["TestUser"]?.Trim();
-
-        if (string.IsNullOrEmpty(currentUser))
-        {
-            currentUser = "User_" + Guid.NewGuid().ToString().Substring(0, 4);
-            Response.Cookies.Append("TestUser", currentUser, new CookieOptions
-            {
-                Expires = DateTime.Now.AddDays(1),
-                Path = "/"
-            });
-        }
-
-        // 2. 【核心邏輯：解碼比對】
-        // ✨ 關鍵修正：將資料庫拿出來的名字先進行「解碼」，避免 &#x5C08; 這種編碼字元干擾比對
+        string currentUser = Request.Cookies["TestUser"]?.Trim() ?? "";
         string dbLocker = WebUtility.HtmlDecode(order.LockedBy ?? "").Trim();
-        currentUser = currentUser.Trim();
 
-        // 條件：(有名字) 且 (名字不等於我) 且 (現在時間還沒超過過期時間)
-        // 我們拿「解碼後的 dbLocker」跟「原始的 currentUser」比對
+        bool isLockedByMe = !string.IsNullOrEmpty(dbLocker) && dbLocker == currentUser;
+
+        // ✨ 邏輯：只有剛搶完單(autoEdit=true)且鎖定權在我身上，進場才是彩色
+        // 平常手動重整，autoEdit 為 false，就會變回唯讀(灰色)
+        ViewBag.AutoStartEdit = autoEdit && isLockedByMe;
+
         bool isLockedByOthers = !string.IsNullOrEmpty(dbLocker) &&
                                 dbLocker != currentUser &&
                                 order.LockedUntil > DateTime.Now;
-
-        // 3. 【處理鎖定分配】
-        if (!isLockedByOthers)
-        {
-            // 既然進到這裡，代表沒有「有效的別人」在鎖
-            // 我們直接存入原始的 currentUser (不要存編碼後的)
-            order.LockedBy = currentUser;
-            order.LockedUntil = DateTime.Now.AddMinutes(5);
-            order.TakeoverRequestedBy = null;
-
-            _db.SaveChanges();
-
-            isLockedByOthers = false;
-            Console.WriteLine($"[DEBUG] 使用者 {currentUser} 取得編輯權。庫存名字為: {order.LockedBy}");
-        }
-        else
-        {
-            Console.WriteLine($"[DEBUG] 使用者 {currentUser} 唯讀中。目前鎖定者(解碼後)：{dbLocker}，直到 {order.LockedUntil}");
-        }
 
         ViewBag.CurrentUser = currentUser;
         ViewBag.IsLockedByOthers = isLockedByOthers;
@@ -298,13 +269,16 @@ public class OrderController : Controller
     public async Task<IActionResult> RequestForceTakeover(string id, string newOwner)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderNumber == id);
-        if (order == null) return Json(new { success = false });
+        if (order == null) return Json(new { success = false, message = "找不到訂單" });
 
-        // 透過 SignalR 通知「正在看這張單」的所有人 (特別是目前的編輯者 A)
-        // 我們對 OrderNumber 這個群組發送指令：OnTakeoverRequested
+        // 在資料庫標記「有人想搶單」，這能防止 A 在背景存檔時死鎖
+        order.TakeoverRequestedBy = newOwner;
+        await _db.SaveChangesAsync();
+
+        // ✨ 透過 SignalR 通知目前在頁面上的所有人（主要是通知 A 存檔並退出）
         await _hubContext.Clients.Group(id).SendAsync("OnTakeoverRequested", newOwner);
 
-        return Json(new { success = true, message = "已發送搶單訊號，等待系統自動存檔..." });
+        return Json(new { success = true });
     }
 
     [HttpPost]
@@ -313,11 +287,52 @@ public class OrderController : Controller
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderNumber == id);
         if (order != null)
         {
+            // 正式把鎖定權轉交給新的人
             order.LockedBy = newOwner;
             order.LockedUntil = DateTime.Now.AddMinutes(5);
             order.TakeoverRequestedBy = null; // ✨ 務必清空標記，代表交接完成
+
             await _db.SaveChangesAsync();
+
+            // (選配) 通知搶單者 B 可以重新整理了
+            await _hubContext.Clients.Group(id).SendAsync("OnTakeoverCompleted");
         }
+        return Json(new { success = true });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> TryStartEdit(string id, string user)
+    {
+        var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderNumber == id);
+        if (order == null) return Json(new { success = false, message = "找不到訂單" });
+
+        string currentUser = user?.Trim();
+        // 關鍵：解碼資料庫中的鎖定者名稱
+        string dbLocker = WebUtility.HtmlDecode(order.LockedBy ?? "").Trim();
+
+        // 判斷是否被「有效的別人」鎖定
+        bool isLockedByOthers = !string.IsNullOrEmpty(dbLocker) &&
+                                dbLocker != currentUser &&
+                                order.LockedUntil > DateTime.Now;
+
+        if (isLockedByOthers)
+        {
+            // 有人在改，回傳鎖定者姓名給前端跳 Confirm
+            return Json(new
+            {
+                success = false,
+                isLocked = true,
+                lockedBy = dbLocker
+            });
+        }
+
+        // 無人鎖定或是「我自己」重進頁面，直接更新鎖定時間 (續約)
+        order.LockedBy = currentUser;
+        order.LockedUntil = DateTime.Now.AddMinutes(5); // 給予 5 分鐘編輯權
+        order.TakeoverRequestedBy = null; // 確保清空搶單標記
+
+        await _db.SaveChangesAsync();
+
         return Json(new { success = true });
     }
 

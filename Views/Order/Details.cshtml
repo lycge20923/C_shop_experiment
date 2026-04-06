@@ -1,52 +1,38 @@
 @model testweb.Models.Order
 
 @{
-    // 取得後端傳來的鎖定狀態
-    bool isLockedByOthers = ViewBag.IsLockedByOthers ?? false;
-
-    // 核心邏輯：如果是別人在改，或是訂單已完成，就設為唯讀
-    bool isReadOnly = Model.Status == "已送單" || Model.Status == "已完成" || isLockedByOthers;
-
-    // 定義 HTML 屬性字串
-    string attr = isReadOnly ? "readonly" : "";
-    string disabledAttr = isReadOnly ? "disabled" : "";
-    string inputClass = isReadOnly ? "form-control-lg bg-light text-muted" : "form-control-lg custom-input";
+    // 判斷訂單是否已經結案（絕對無法編輯）
+    bool isFinalized = Model.Status == "已送單" || Model.Status == "已完成";
 }
 
 <div class="container mt-5 pb-5">
     <div class="card shadow-lg border-0">
         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center p-3">
             <h4 class="mb-0"><i class="bi bi-gear-fill"></i> 訂單管理 - @Model.OrderNumber</h4>
+
+            @if (!isFinalized)
+            {
+                <button type="button" id="btnEdit" class="btn btn-light fw-bold shadow-sm">
+                    <i class="bi bi-pencil-square me-1"></i> 編輯訂單
+                </button>
+            }
         </div>
 
         <div class="card-body p-4 bg-white">
-
-
-            @if (ViewBag.IsLockedByOthers == true)
-            {
-                <div id="lockBanner"
-                    class="alert alert-warning d-flex justify-content-between align-items-center shadow-sm mb-4 border-start border-4 border-warning">
-                    <div>
-                        <i class="bi bi-person-fill-lock fs-4 me-2"></i>
-                        <strong>這筆訂單正在被 [@Html.Raw(Model.LockedBy)] 編輯中，已鎖定</strong>
-                    </div>
-                    <button type="button" id="btnTakeover" class="btn btn-danger btn-sm fw-bold px-3">
-                        <i class="bi bi- lightning-charge-fill me-1"></i>強制搶單
-                    </button>
-                </div>
-            }
-
-            <div id="editWarning" class="alert alert-warning d-flex align-items-center mb-4 border-0 shadow-sm py-2"
-                role="alert">
+            @* 警語區塊：預設隱藏，進入編輯模式才顯示 *@
+            <div id="editWarning"
+                class="alert alert-warning d-flex align-items-center mb-4 border-0 shadow-sm py-2 d-none" role="alert">
                 <i class="bi bi-exclamation-triangle-fill fs-4 me-2"></i>
                 <div>
-                    <small class="d-block fw-bold">編輯須知：</small>
-                    <span class="small">系統**不會自動儲存**您的變更。若遇意外關機或連線中斷，內容將會遺失，請養成隨時點擊下方「暫存修改」的習慣。</span>
+                    <small class="d-block fw-bold">編輯模式中：</small>
+                    <span class="small">系統不會自動儲存。請養成隨時點擊下方「暫存修改」的習慣。</span>
                 </div>
             </div>
+
             <form id="orderForm">
-                @* 狀態與時間區塊 *@
                 <input type="hidden" name="OrderNumber" value="@Model.OrderNumber" />
+
+                @* 基礎資訊區塊 (唯讀) *@
                 <div class="row g-3 mb-4 border-bottom pb-4 bg-light mx-n4 px-4 py-3">
                     <div class="col-md-6">
                         <label class="form-label fw-bold text-muted small">建立時間</label>
@@ -59,49 +45,47 @@
                         <div class="d-flex align-items-center h-100">
                             <span
                                 class="badge @(Model.Status == "編輯中" ? "bg-warning text-dark" : "bg-success") fs-6 shadow-sm px-3">@Model.Status</span>
-                            <span class="ms-2 text-muted small italic">@(isReadOnly ? "(唯讀模式)" : "(編輯模式)")</span>
                         </div>
                     </div>
                 </div>
 
-                @* 收件人資訊 *@
+                @* 收件人資訊 (預設 disabled) *@
                 <div class="row g-4">
                     <div class="col-12">
-                        <h5 class="text-primary border-start border-4 border-primary ps-2 mb-4">收件人資訊編輯</h5>
+                        <h5 class="text-primary border-start border-4 border-primary ps-2 mb-4">收件人資訊</h5>
                         <div class="mb-4">
                             <label class="form-label fw-bold text-dark">收件姓名</label>
-                            <input type="text" class="form-control @inputClass" name="CustomerName"
-                                value="@Model.CustomerName" @attr>
+                            <input type="text" class="form-control form-control-lg edit-field" name="CustomerName"
+                                value="@Model.CustomerName" disabled>
                         </div>
                         <div class="mb-4">
                             <label class="form-label fw-bold text-dark">聯絡電話</label>
-                            <input type="text" class="form-control @inputClass" name="PhoneNumber"
-                                value="@Model.PhoneNumber" @attr>
+                            <input type="text" class="form-control form-control-lg edit-field" name="PhoneNumber"
+                                value="@Model.PhoneNumber" disabled>
                         </div>
                         <div class="mb-4">
                             <label class="form-label fw-bold text-dark">配送地址</label>
-                            <input type="text" class="form-control @inputClass" name="ShippingAddress"
-                                value="@Model.ShippingAddress" @attr>
+                            <input type="text" class="form-control form-control-lg edit-field" name="ShippingAddress"
+                                value="@Model.ShippingAddress" disabled>
                         </div>
                         <div class="mb-4">
                             <label class="form-label fw-bold text-dark">備註說明</label>
-                            <textarea class="form-control @inputClass" rows="3" name="Note" @attr>@Model.Note</textarea>
+                            <textarea class="form-control form-control-lg edit-field" rows="3" name="Note"
+                                disabled>@Model.Note</textarea>
                         </div>
                     </div>
                 </div>
 
-                @* 商品明細 *@
+                @* 商品明細 (預設 disabled) *@
                 <div class="mt-5">
-                    <h5 class="text-primary border-start border-4 border-primary ps-2 mb-3">購買商品明細 (可編輯項目)</h5>
+                    <h5 class="text-primary border-start border-4 border-primary ps-2 mb-3">購買商品明細</h5>
                     <div class="accordion shadow-sm" id="productAccordion">
                         @for (int i = 0; i < Model.OrderItems.Count; i++)
                         {
                             var item = Model.OrderItems[i];
                             var collapseId = "collapse" + i;
-                            var headingId = "heading" + i;
-
                             <div class="accordion-item item-row">
-                                <h2 class="accordion-header" id="@headingId">
+                                <h2 class="accordion-header">
                                     <button class="accordion-button collapsed bg-white" type="button"
                                         data-bs-toggle="collapse" data-bs-target="#@collapseId">
                                         <div class="d-flex justify-content-between w-100 me-3 align-items-center">
@@ -119,102 +103,68 @@
                                     <div class="row g-3 mb-3">
                                         <div class="col-md-6">
                                             <label class="form-label fw-bold small text-muted">商品名稱</label>
-                                            <input type="text" class="form-control @inputClass"
-                                                name="OrderItems[@i].ProductName" value="@item.ProductName" @attr>
+                                            <input type="text" class="form-control edit-field"
+                                                name="OrderItems[@i].ProductName" value="@item.ProductName" disabled>
                                         </div>
                                         <div class="col-md-3">
                                             <label class="form-label fw-bold small text-muted">規格/顏色</label>
-                                            <input type="text" class="form-control @inputClass"
-                                                name="OrderItems[@i].Color" value="@item.Color" @attr>
+                                            <input type="text" class="form-control edit-field"
+                                                name="OrderItems[@i].Color" value="@item.Color" disabled>
                                         </div>
-                                        <div class="col-md-3">
-                                            <label class="form-label fw-bold small text-muted">年代/品項</label>
-                                            <input type="text" class="form-control @inputClass"
-                                                name="OrderItems[@i].Year" value="@item.Year" @attr>
-                                        </div>
-                                    </div>
-                                    <div class="row g-3 mb-3">
                                         <div class="col-md-3">
                                             <label class="form-label fw-bold small text-muted">數量</label>
-                                            <input type="number" class="form-control @inputClass input-qty"
-                                                name="OrderItems[@i].Quantity" value="@item.Quantity" min="1" @attr>
-                                        </div>
-                                        <div class="col-md-9">
-                                            <label class="form-label fw-bold small text-muted">商品備註說明</label>
-                                            <input type="text" class="form-control @inputClass"
-                                                name="OrderItems[@i].ItemNote" value="@item.ItemNote" @attr>
+                                            <input type="number" class="form-control edit-field input-qty"
+                                                name="OrderItems[@i].Quantity" value="@item.Quantity" min="1" disabled>
                                         </div>
                                     </div>
                                     <div class="row g-3">
                                         <div class="col-md-6">
-                                            <label class="form-label fw-bold small text-muted">單價 (系統預設)</label>
-                                            <div class="input-group">
-                                                <span class="input-group-text border-0 bg-light fw-bold">$</span>
-                                                <input type="text" readonly
-                                                    class="form-control form-control-lg bg-light fw-bold input-price"
-                                                    value="@item.UnitPrice.ToString("N0")">
-                                            </div>
+                                            <label class="form-label fw-bold small text-muted">單價</label>
+                                            <input type="number" class="form-control edit-field input-price"
+                                                name="OrderItems[@i].UnitPrice" value="@item.UnitPrice" disabled>
                                         </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label fw-bold small text-muted">該項小計 (唯讀)</label>
-                                            <div class="input-group">
-                                                <span
-                                                    class="input-group-text border-0 bg-light fw-bold text-danger">$</span>
-                                                <input type="text" readonly
-                                                    class="form-control form-control-lg bg-light fw-bold text-danger input-subtotal"
-                                                    value="@item.SubTotal.ToString("N0")">
-                                            </div>
+                                        <div class="col-md-6 text-end d-flex align-items-end justify-content-end">
+                                            <button type="button"
+                                                class="btn btn-sm btn-outline-danger btn-remove-item d-none">移除此項</button>
                                         </div>
                                     </div>
-                                    @if (!isReadOnly)
-                                    {
-                                        <div class="text-end mt-3">
-                                            <button type="button"
-                                                class="btn btn-sm btn-outline-danger btn-remove-item">移除此項</button>
-                                        </div>
-                                    }
                                 </div>
                             </div>
                         </div>
                                                 }
                     </div>
+                    <button type="button" id="btnAddItem"
+                        class="btn btn-link text-decoration-none fw-bold text-primary py-3 w-100 border-dashed rounded shadow-sm d-none mt-3">
+                        <i class="bi bi-plus-lg me-2"></i>新增商品項目
+                    </button>
                 </div>
-
-                @if (!isReadOnly)
-                {
-                    <div class="mt-3">
-                        <button type="button" id="btnAddItem"
-                            class="btn btn-link text-decoration-none fw-bold text-primary py-3 w-100 border-dashed rounded shadow-sm">
-                            <i class="bi bi-plus-lg me-2"></i>新增商品項目
-                        </button>
-                    </div>
-                }
 
                 <div class="text-end mt-4 p-4 bg-light border rounded shadow-sm">
                     <span class="fw-bold me-3 text-secondary">訂單應付總額</span>
-                    <span class="text-danger fw-bold fs-2">$@Model.TotalAmount.ToString("N0")</span>
+                    <span id="totalAmountDisplay"
+                        class="text-danger fw-bold fs-2">$@Model.TotalAmount.ToString("N0")</span>
                 </div>
             </form>
 
-            @* 底部固定列：合併後的邏輯 *@
+            @* 底部動作列 *@
             <div class="fixed-bottom bg-white border-top shadow-lg p-3 d-flex justify-content-center gap-3"
                 style="z-index: 1050;">
-                @if (!isReadOnly)
-                {
+                @* 檢視模式按鈕 *@
+                <div id="viewModeGroup">
+                    <a href="/Home/DatabaseTest" class="btn btn-secondary px-5 fw-bold"><i
+                            class="bi bi-arrow-left me-2"></i>返回列表</a>
+                    <button type="button" class="btn btn-outline-primary px-5 fw-bold" onclick="window.print()"><i
+                            class="bi bi-printer me-2"></i>列印</button>
+                </div>
+                @* 編輯模式按鈕 (預設隱藏) *@
+                <div id="editModeGroup" class="d-none">
                     <button type="button" id="btnSave" class="btn btn-warning px-5 fw-bold shadow-sm"><i
                             class="bi bi-save me-2"></i>暫存修改</button>
-                    <button type="button" id="btnCancel" class="btn btn-outline-secondary px-5 fw-bold"
-                        onclick="location.reload()"><i class="bi bi-x-circle me-2"></i>取消變更</button>
                     <button type="button" id="btnSubmit" class="btn btn-primary px-5 fw-bold shadow-sm"><i
-                            class="bi bi-send-check me-2"></i>正式送出訂單</button>
-                }
-                else
-                {
-                    <a href="/Home/DatabaseTest" class="btn btn-secondary px-5 fw-bold"><i
-                            class="bi bi-arrow-left me-2"></i>返回搜尋列表</a>
-                    <button type="button" class="btn btn-outline-primary px-5 fw-bold" onclick="window.print()"><i
-                            class="bi bi-printer me-2"></i>列印訂單</button>
-                }
+                            class="bi bi-send-check me-2"></i>正式送出</button>
+                    <button type="button" class="btn btn-outline-secondary px-5 fw-bold"
+                        onclick="location.reload()">取消變更</button>
+                </div>
             </div>
             <div style="height: 100px;"></div>
         </div>
@@ -224,422 +174,238 @@
 @section Scripts {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
     <script>
-        // 定義一個變數來紀錄是否有變更
-        let initialFormData = "";
-        let isSafeExit = false;
         const orderId = '@Model.OrderNumber';
-        const isReadOnly = @(ViewBag.IsLockedByOthers == true ? "true" : "false");
         const myName = "@Html.Raw(ViewBag.CurrentUser)";
+        let isEditing = false;
+        let isSafeExit = false;
+        let initialFormData = "";
+        let itemIndex = @Model.OrderItems.Count;
 
         $(document).ready(function () {
+            if ("@ViewBag.AutoStartEdit" === "True") {
+                enterEditMode();
+            }
 
-            // --- SignalR 即時接手邏輯開始 ---
+            function showOverlay(message) {
+                // 移除可能已存在的 overlay
+                $("#takeover-overlay").remove();
 
-            // 1. 建立 SignalR 連線
+                const overlay = $(`
+                        <div id="takeover-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);color:white;z-index:10000;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+                            <div class="spinner-border text-warning mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                            <h3 class="fw-bold">${message}</h3>
+                            <p class="text-light mt-2">請勿關閉視窗，系統正在確保您的變更已安全同步...</p>
+                        </div>
+                    `).appendTo('body');
+            }
+
+            // --- SignalR 初始化 ---
             const connection = new signalR.HubConnectionBuilder()
                 .withUrl("/orderHub")
-                .withAutomaticReconnect() // 斷線自動重連
+                .withAutomaticReconnect()
                 .build();
 
-            // 1. 監聽重複分頁訊號
+            connection.start().then(() => {
+                connection.invoke("JoinOrderGroup", orderId);
+                connection.invoke("RegisterUser", myName);
+            });
+
+            // 監聽：有人搶單 (被踢掉)
+            connection.on("OnTakeoverRequested", function (newOwner) {
+                if (newOwner === myName) return;
+
+                isSafeExit = true; // 確保重整時不跳瀏覽器預設警告
+
+                // 1. A 執行自動儲存 (遺言存檔)
+                var formData = $("#orderForm").serialize();
+                $.ajax({
+                    url: '/Order/UpdateOrder',
+                    type: 'POST',
+                    data: formData,
+                    success: function () {
+                        // 2. ✨ 存檔成功後，立即正式轉移鎖定給 B
+                        $.post('/Order/FinalizeTakeover', { id: orderId, newOwner: newOwner }, function () {
+                            // 3. ✨ 關鍵：立即通知 B，讓他可以重整進場 (B 不用等 A 按確定)
+                            connection.invoke("NotifyTakeoverComplete", orderId, newOwner);
+
+                            // 4. ✨ 顯示一個不具「阻塞性」的視窗告知 A (例如用自定義的 HTML 或是簡單的 Confirm)
+                            // 這裡我們建立一個全螢幕遮罩，中間放一個按鈕讓 A 確認
+                            showTakeoverModal(newOwner);
+                        });
+                    }
+                });
+            });
+
+            // A 被搶單時顯示的專用視窗
+            function showTakeoverModal(newOwner) {
+                // 移除可能存在的舊遮罩
+                $("#takeover-notice").remove();
+
+                const modalHtml = `
+                <div id="takeover-notice" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;justify-content:center;align-items:center;">
+                    <div class="bg-white p-5 rounded shadow-lg text-center" style="max-width:400px;">
+                        <h3 class="text-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> 編輯權接管通知</h3>
+                        <p class="mb-4">專員 <strong>[${newOwner}]</strong> 已取得此訂單的編輯權。<br>您的修改已安全同步。</p>
+                        <button type="button" class="btn btn-primary w-100 fw-bold" onclick="window.location.reload()">我知道了，重新整理</button>
+                    </div>
+                </div>
+            `;
+                $('body').append(modalHtml);
+            }
+
+            // 監聽：資料同步完成訊號 (當 A 存完，B 準備進場)
+            connection.on("OnDataSynced", function (targetUser) {
+                if (targetUser === myName) {
+                    console.log("A 已完成同步，B 準備進場...");
+                    // ✨ 使用 autoEdit=true 讓 B 重整後直接變彩色編輯模式
+                    window.location.href = `/Order/Details?id=${orderId}&autoEdit=true`;
+                }
+            });
+
+            // 監聽：重複分頁
             connection.on("OnDuplicateTabDetected", function () {
-                isSafeExit = true; // ✨ 這是你之前設定的旗標，避免跳出「確定要離開嗎」
-
-                // 跳出警告
-                alert("⚠️ 偵測到重複分頁：您已在另一個視窗開啟此頁面。\n為確保資料正確性，本分頁將跳回首頁。");
-
-                // 按下確定後跳轉
+                isSafeExit = true;
+                alert("⚠️ 偵測到重複分頁：您已在另一個視窗開啟此頁面。");
                 window.location.href = "/Home/DatabaseTest";
             });
 
-            // 2. 啟動連線並加入群組
-            connection.start().then(function () {
-                console.log("SignalR 已連線！");
-                // 通知伺服器：我要聽這張訂單 (orderId) 的消息
-                connection.invoke("JoinOrderGroup", orderId);
-                connection.invoke("RegisterUser", myName);
+            // --- 編輯控制邏輯 ---
 
-            }).catch(err => console.error("SignalR 連線失敗: ", err));
+            $("#btnEdit").click(function () {
+                const btn = $(this);
+                // 點擊瞬間先變更狀態，避免重複點擊
+                btn.prop("disabled", true).text("檢查中...");
 
-            // 3. 【核心監聽】當伺服器說「有人要搶單」時 (OnTakeoverRequested)
-            connection.on("OnTakeoverRequested", function (newOwner) {
-                const myName = "@ViewBag.CurrentUser"; // 取得當前瀏覽器的使用者名稱
-                // ✨ 關鍵判斷：如果發起搶單的人就是我，我不需要「被踢掉」
-                if (newOwner === myName) {
-                    console.log("我是搶單發起者，等待對方存檔中...");
-                    return;
-                }
-
-                if (isReadOnly) return;
-                isSafeExit = true; // 避免 beforeunload 彈窗
-
-                // 這裡建議加一個小 Loading 畫面，避免 A 繼續亂點
-                alert("⚠️ 偵測到搶單：正在為您自動儲存並轉為唯讀模式...");
-
-                // ✨ 確保抓取最新資料
-                var formData = $("#orderForm").serialize();
-
-                $.ajax({
-                    url: '/Order/UpdateOrder',
-                    type: 'POST',
-                    data: formData,
-                    // ✨ 加上 async: false (雖然不推薦但這裡很有效) 或確保順序
-                    success: function (res) {
-                        console.log("被搶單前自動存檔成功");
-                        // 存檔成功才執行交接
-                        $.post('/Order/FinalizeTakeover', { id: orderId, newOwner: newOwner }, function () {
-                            window.location.reload();
-                        });
-                    },
-                    error: function () {
-                        // 萬一存檔失敗，還是要交接，不然會死鎖
-                        $.post('/Order/FinalizeTakeover', { id: orderId, newOwner: newOwner }, function () {
-                            window.location.reload();
-                        });
+                $.post('/Order/TryStartEdit', { id: orderId, user: myName }, function (res) {
+                    if (res.success) {
+                        enterEditMode();
+                    } else if (res.isLocked) {
+                        // 有人在改，詢問是否搶奪
+                        if (confirm(`【警告】專員 [${res.lockedBy}] 正在編輯中，是否強制搶奪編輯權？`)) {
+                            handleTakeoverRequest(btn); // 傳入按鈕物件以利控制
+                        } else {
+                            // 取消搶單，恢復按鈕
+                            btn.prop("disabled", false).html('<i class="bi bi-pencil-square me-1"></i> 編輯訂單');
+                        }
+                    } else {
+                        alert("錯誤：" + res.message);
+                        btn.prop("disabled", false).html('<i class="bi bi-pencil-square me-1"></i> 編輯訂單');
                     }
                 });
             });
 
-            // (選配) 當交接完成，通知搶單者 (B) 重新整理
-            connection.on("OnTakeoverCompleted", function () {
-                // 如果我是 B，我就會收到這個，然後自動 reload
-                if (isReadOnly) {
-                    window.location.reload();
-                }
-            });
+            // 進入編輯模式的 UI 切換 (新增：按鈕變灰且改字)
+            function enterEditMode() {
+                isEditing = true;
 
-            // --- SignalR 即時接手邏輯結束 ---
+                // 1. 處理右上角編輯按鈕：反灰並改字
+                $("#btnEdit").prop("disabled", true)
+                    .removeClass("btn-light")
+                    .addClass("btn-secondary")
+                    .html('<i class="bi bi-lock-fill me-1"></i> 正在編輯');
+                $("#btnEdit").show(); // 確保它是顯示的但不能按
 
-            // 頁面載入完成後，立刻幫表單「拍照」
-            initialFormData = $("#orderForm").serialize();
-            let itemIndex = @Model.OrderItems.Count;
+                // 2. 解除欄位禁用
+                $(".edit-field").prop("disabled", false);
 
-            // 監聽所有變動
-            $(document).on("change input", "#orderForm input, #orderForm textarea, #orderForm select", function () {
-                if (!isReadOnly) {
-                    $("#editWarning").addClass("text-danger fw-bold");
-                }
-            });
+                // 3. 顯示功能按鈕與警語
+                $(".btn-remove-item, #btnAddItem, #editWarning").removeClass("d-none");
+                $("#viewModeGroup").addClass("d-none");
+                $("#editModeGroup").removeClass("d-none");
 
-            // 攔截瀏覽器關閉/重新整理
-            window.addEventListener('beforeunload', function (e) {
-                // 如果是唯讀模式，直接放行
-                if (isReadOnly) return;
-
-                // ✨ 如果標記為「安全離開」，就直接放行，不跳警告
-                if (isSafeExit) return;
-
-                // 即時抓取目前的表單狀態
-                let currentFormData = $("#orderForm").serialize();
-
-                // ✨ 關鍵比對：只有「現在」不等於「當初」，才跳出警告
-                if (currentFormData !== initialFormData) {
-                    e.preventDefault();
-                    e.returnValue = ''; // 跳出瀏覽器預設的「確定要離開嗎？
-                    // 這裡可以順便更新警語樣式
-                    $("#editWarning").addClass("text-danger fw-bold");
-                }
-            });
-
-            // 1. 金額計算 (保持不變...)
-            $(document).on("input change", ".input-qty, .input-price", function () {
-                var $row = $(this).closest(".accordion-body");
-                var $itemRow = $(this).closest(".item-row");
-                var qty = parseInt($row.find(".input-qty").val()) || 0;
-                var priceText = $row.find(".input-price").val() || "0";
-                var price = parseFloat(priceText.toString().replace(/,/g, '')) || 0;
-                var subtotal = qty * price;
-                var formattedSubtotal = subtotal.toLocaleString('zh-TW');
-                $row.find(".input-subtotal").val(formattedSubtotal);
-                $itemRow.find(".header-subtotal").text("$" + formattedSubtotal);
-                updateTotalAmount();
-            });
-
-            // 2. 新增商品 (保持不變...)
-            // 2. 【新增商品項目】按鈕邏輯
-            $("#btnAddItem").click(function () {
-                const newId = `collapseNew${itemIndex}`;
-                const headingId = `headingNew${itemIndex}`;
-
-                // 完整的 HTML 樣板，確保屬性與後端 Model 對齊
-                const newItemHtml = `
-                                                <div class="accordion-item item-row border-success-subtle shadow-sm mb-2">
-                                                    <h2 class="accordion-header" id="${headingId}">
-                                                        <button class="accordion-button bg-white text-success fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#${newId}">
-                                                            <div class="d-flex justify-content-between w-100 me-3 align-items-center">
-                                                                <span><i class="bi bi-plus-circle me-2"></i>新商品 (請輸入內容)</span>
-                                                                <span class="text-muted small">小計: <span class="text-danger fw-bold header-subtotal">$0</span></span>
-                                                            </div>
-                                                        </button>
-                                                    </h2>
-                                                    <div id="${newId}" class="accordion-collapse collapse show" data-bs-parent="#productAccordion">
-                                                        <div class="accordion-body bg-white border-top">
-                                                            <input type="hidden" name="OrderItems[${itemIndex}].Id" value="0" />
-                                                            <div class="row g-3 mb-3">
-                                                                <div class="col-md-6">
-                                                                    <label class="form-label fw-bold small text-muted">商品名稱</label>
-                                                                    <input type="text" class="form-control form-control-lg custom-input" name="OrderItems[${itemIndex}].ProductName" placeholder="新商品名稱">
-                                                                </div>
-                                                                <div class="col-md-3">
-                                                                    <label class="form-label fw-bold small text-muted">規格/顏色</label>
-                                                                    <input type="text" class="form-control form-control-lg custom-input" name="OrderItems[${itemIndex}].Color">
-                                                                </div>
-                                                                <div class="col-md-3">
-                                                                    <label class="form-label fw-bold small text-muted">年代/品項</label>
-                                                                    <input type="text" class="form-control form-control-lg custom-input" name="OrderItems[${itemIndex}].Year">
-                                                                </div>
-                                                            </div>
-                                                            <div class="row g-3 mb-3">
-                                                                <div class="col-md-3">
-                                                                    <label class="form-label fw-bold small text-muted">數量</label>
-                                                                    <input type="number" class="form-control form-control-lg custom-input input-qty" name="OrderItems[${itemIndex}].Quantity" value="1" min="1">
-                                                                </div>
-                                                                <div class="col-md-9">
-                                                                    <label class="form-label fw-bold small text-muted">商品備註說明</label>
-                                                                    <input type="text" class="form-control form-control-lg custom-input" name="OrderItems[${itemIndex}].ItemNote">
-                                                                </div>
-                                                            </div>
-                                                            <div class="row g-3">
-                                                                <div class="col-md-6">
-                                                                    <label class="form-label fw-bold small text-muted">單價</label>
-                                                                    <div class="input-group">
-                                                                        <span class="input-group-text border-0 bg-light fw-bold">$</span>
-                                                                        <input type="number" class="form-control form-control-lg custom-input input-price" name="OrderItems[${itemIndex}].UnitPrice" value="0">
-                                                                    </div>
-                                                                </div>
-                                                                <div class="col-md-6">
-                                                                    <label class="form-label fw-bold small text-muted">該項小計</label>
-                                                                    <div class="input-group">
-                                                                        <span class="input-group-text border-0 bg-light fw-bold text-danger">$</span>
-                                                                        <input type="text" readonly class="form-control form-control-lg bg-light fw-bold text-danger input-subtotal" value="0">
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <div class="text-end mt-3">
-                                                                <button type="button" class="btn btn-sm btn-outline-danger btn-remove-item">移除此項</button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>`;
-
-                $("#productAccordion").append(newItemHtml);
-                itemIndex++; // 索引累加
-                updateTotalAmount(); // 重新計算總額
-
-                // 觸發提醒文字變紅
-                $("#editWarning").addClass("text-danger fw-bold");
-            });
-
-            // 3. 移除項目
-            $(document).on("click", ".btn-remove-item", function () {
-                $(this).closest(".accordion-item").remove();
-                updateTotalAmount();
-            });
-
-            // 4. 更新總額 (保持不變...)
-            function updateTotalAmount() {
-                var total = 0;
-                $(".input-subtotal").each(function () {
-                    var val = $(this).val() || "0";
-                    total += parseFloat(val.toString().replace(/,/g, '')) || 0;
-                });
-                $(".fs-2.text-danger").text("$" + total.toLocaleString('zh-TW'));
+                // 4. 拍下快照
+                initialFormData = $("#orderForm").serialize();
             }
 
-            // 5. 【儲存修改】
+            function handleTakeoverRequest(editBtn) {
+                editBtn.prop("disabled", true).text("等待對方同步資料...");
+
+                $.post('/Order/RequestForceTakeover', { id: orderId, newOwner: myName }, function (res) {
+                    if (!res.success) {
+                        alert("搶單失敗：" + res.message);
+                        location.reload();
+                    }
+                    // 這裡不需要寫 setTimeout，因為我們在上面監聽 OnDataSynced
+                });
+            }
+
+            // --- 其他功能邏輯 (計算、新增、存檔) ---
+
+            $(document).on("input change", ".input-qty, .input-price", function () {
+                updateTotalAmount();
+            });
+
+            function updateTotalAmount() {
+                let total = 0;
+                $(".item-row").each(function () {
+                    const qty = parseFloat($(this).find(".input-qty").val()) || 0;
+                    const price = parseFloat($(this).find(".input-price").val()) || 0;
+                    const subtotal = qty * price;
+                    $(this).find(".header-subtotal").text("$" + subtotal.toLocaleString());
+                    total += subtotal;
+                });
+                $("#totalAmountDisplay").text("$" + total.toLocaleString());
+            }
+
             $("#btnSave").click(function () {
-                // ... 前面的驗證邏輯 ...
-                var formData = $("#orderForm").serialize();
-
-                $.ajax({
-                    url: '/Order/UpdateOrder',
-                    type: 'POST',
-                    data: formData,
-                    success: function (res) {
-                        if (res.success) {
-                            // ✨ 重要：儲存成功後，將「現在的樣子」設為新的「初始狀態」
-                            initialFormData = formData;
-                            $("#editWarning").removeClass("text-danger fw-bold");
-                            alert("儲存成功！");
-                            // 如果你有 reload，頁面重啟後自然會重新拍照
-                            window.location.reload();
-                        }
+                $.post('/Order/UpdateOrder', $("#orderForm").serialize(), function (res) {
+                    if (res.success) {
+                        initialFormData = $("#orderForm").serialize();
+                        alert("暫存成功！");
                     }
                 });
             });
 
-            // 6. 【正式送出訂單】
             $("#btnSubmit").click(function () {
-                if (!confirm("確定要正式送出訂單嗎？送出後將無法再修改內容。")) return;
-                if (!$("input[name='CustomerName']").val()) {
-                    alert("請輸入收件人姓名");
-                    return;
-                }
-                var formData = $("#orderForm").serialize() + "&isSubmit=true";
-                $(this).prop("disabled", true).text("送出中...");
-
-                $.ajax({
-                    url: '/Order/UpdateOrder',
-                    type: 'POST',
-                    data: formData,
-                    success: function (res) {
-                        if (res.success) {
-                            isDirty = false; // ✨ 送出成功，清除髒標記
-                            alert("訂單已正式送出！");
-                            window.location.reload();
-                        } else {
-                            alert("錯誤：" + res.message);
-                            $("#btnSubmit").prop("disabled", false).text("正式送出訂單");
-                        }
+                if (!confirm("確定要正式送出嗎？送出後將無法再修改。")) return;
+                $.post('/Order/UpdateOrder', $("#orderForm").serialize() + "&isSubmit=true", function (res) {
+                    if (res.success) {
+                        isSafeExit = true;
+                        alert("訂單已送出！");
+                        window.location.reload();
                     }
                 });
             });
 
-            $("#btnTakeover").click(function () {
-                const requester = "@ViewBag.CurrentUser";
-                const btn = $(this);
-
-                if (confirm("【警告】強制搶單將會中斷目前編輯者的作業。系統會嘗試自動幫對方存檔，確定要接手嗎？")) {
-
-                    btn.prop("disabled", true).text("請求接管中...");
-
-                    $.post('/Order/RequestForceTakeover', { id: orderId, newOwner: requester }, function (res) {
-                        if (res.success) {
-                            // 1. 設定一個變數來紀錄是否已經重整過，避免重複觸發
-                            let hasReloaded = false;
-
-                            // 2. 定義重整函式
-                            const doReload = () => {
-                                if (!hasReloaded) {
-                                    hasReloaded = true;
-                                    window.location.reload();
-                                }
-                            };
-
-                            // 3. ✨ 設定 3 秒自動重整 (保險機制)
-                            const autoTimer = setTimeout(doReload, 3000);
-
-                            // 4. ✨ 顯示提示視窗 (阻斷機制)
-                            // 當使用者按下「確定」的那一刻，立刻執行重整
-                            alert("已送出請求，請稍候 1-3 秒待系統完成交接...");
-
-                            // 使用者按完確定後，清除計時器並立刻重整
-                            clearTimeout(autoTimer);
-                            doReload();
-
-                        } else {
-                            alert("請求失敗：" + res.message);
-                            btn.prop("disabled", false).text("強制搶單");
-                        }
-                    });
+            window.addEventListener('beforeunload', function (e) {
+                if (!isEditing || isSafeExit) return;
+                if ($("#orderForm").serialize() !== initialFormData) {
+                    e.preventDefault();
+                    e.returnValue = '';
                 }
             });
 
-            // 當按下「取消變更」按鈕時，主動呼叫解鎖 API
-            $("#btnCancel, .btn-back").click(function (e) {
-                e.preventDefault();
-                $.post('/Order/UnlockOrder', { id: orderId }, function () {
-                    window.location.href = '/Order/Index'; // 或你指定的路徑
-                });
-            });
-
-            // 途徑 C：【核心】直接關閉分頁、關閉瀏覽器、或跳轉到其他網站
-            // 使用 sendBeacon 是目前網頁開發中「最可靠」的離場通知方式
+            // 離場自動解鎖
             window.addEventListener('pagehide', function () {
-                if (!isReadOnly && !isSafeExit) {
-                    // 使用 QueryString 方式確保後端一定收得到 id
+                if (isEditing && !isSafeExit) {
                     navigator.sendBeacon('/Order/UnlockOrder?id=' + orderId);
                 }
             });
-
-            // 7. ✨【自動暫存邏輯】 (每 120 秒執行一次)
-            setInterval(function () {
-                if (isReadOnly) return;
-
-                let currentFormData = $("#orderForm").serialize();
-
-                // 只有真的有差才存
-                if (currentFormData !== initialFormData) {
-                    console.log("偵測到實質內容變更，執行自動暫存...");
-                    $.ajax({
-                        url: '/Order/UpdateOrder',
-                        type: 'POST',
-                        data: currentFormData,
-                        success: function (res) {
-                            if (res.success) {
-                                // ✨ 自動存完後，更新快照，這樣關閉就不會跳警告
-                                initialFormData = currentFormData;
-                                $("#editWarning").removeClass("text-danger fw-bold");
-                            }
-                        }
-                    });
-                }
-            }, 120000);
-        }); 
+        });
     </script>
     <style>
-        /* 強化可編輯欄位的視覺效果 */
-        .custom-input {
-            background-color: #ffffff !important;
-            /* 強制白色 */
-            border: 2px solid #dee2e6 !important;
-            /* 較明顯的灰色邊框 */
-            border-radius: 8px;
-            transition: all 0.2s ease-in-out;
-        }
-
-        .custom-input:hover {
-            border-color: #adb5bd !important;
-            /* 游標移上去邊框加深 */
-        }
-
-        .custom-input:focus {
-            border-color: #0d6efd !important;
-            /* 點擊時變藍色 */
-            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.1);
-            background-color: #fff !important;
-        }
-
-        /* 唯讀區塊的樣式 */
-        .bg-light {
-            background-color: #f8f9fa !important;
+        #btnEdit:disabled {
+            cursor: not-allowed;
+            opacity: 0.8;
         }
 
         .border-dashed {
             border: 2px dashed #dee2e6 !important;
-            /* 虛線邊框 */
-            background-color: #ffffff;
-            /* 初始設為白色，跟背景融合 */
-            transition: all 0.2s ease;
         }
 
         .border-dashed:hover {
-            background-color: #f1f8ff;
-            /* 移上去變成淡淡的藍色 */
+            background-color: #f8f9fa;
             border-color: #0d6efd !important;
             color: #0d6efd !important;
         }
 
-        /* 固定底部列的樣式優化 */
         .fixed-bottom {
             transition: all 0.3s ease;
         }
 
-        /* 按鈕懸停效果 */
-        .fixed-bottom .btn {
-            transition: transform 0.2s;
-        }
-
-        .fixed-bottom .btn:hover {
-            transform: translateY(-2px);
-            /* 輕微向上漂浮感 */
-        }
-
-        /* 墊片確保最後一個元素不會被遮擋 */
-        .container {
-            margin-bottom: 50px;
+        .edit-field:disabled {
+            background-color: #f8f9fa !important;
+            color: #6c757d;
         }
     </style>
-
-
 }
