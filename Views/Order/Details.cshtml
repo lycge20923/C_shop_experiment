@@ -184,6 +184,14 @@
         $(document).ready(function () {
             if ("@ViewBag.AutoStartEdit" === "True") {
                 enterEditMode();
+                // 使用 HTML5 History API 修改網址而不重整
+                // 這樣使用者之後手動按 F5，網址就沒有 isTakeover，會乖乖變回唯讀
+                if (window.location.search.indexOf('isTakeover=true') > -1) {
+                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + "?id=" + orderId;
+                    window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+                }
+            } else {
+                $(".edit-field").prop("disabled", true);
             }
 
             function showOverlay(message) {
@@ -191,12 +199,12 @@
                 $("#takeover-overlay").remove();
 
                 const overlay = $(`
-                        <div id="takeover-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);color:white;z-index:10000;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
-                            <div class="spinner-border text-warning mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
-                            <h3 class="fw-bold">${message}</h3>
-                            <p class="text-light mt-2">請勿關閉視窗，系統正在確保您的變更已安全同步...</p>
-                        </div>
-                    `).appendTo('body');
+                                        <div id="takeover-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);color:white;z-index:10000;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
+                                            <div class="spinner-border text-warning mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                                            <h3 class="fw-bold">${message}</h3>
+                                            <p class="text-light mt-2">請勿關閉視窗，系統正在確保您的變更已安全同步...</p>
+                                        </div>
+                                    `).appendTo('body');
             }
 
             // --- SignalR 初始化 ---
@@ -242,23 +250,23 @@
                 $("#takeover-notice").remove();
 
                 const modalHtml = `
-                <div id="takeover-notice" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;justify-content:center;align-items:center;">
-                    <div class="bg-white p-5 rounded shadow-lg text-center" style="max-width:400px;">
-                        <h3 class="text-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> 編輯權接管通知</h3>
-                        <p class="mb-4">專員 <strong>[${newOwner}]</strong> 已取得此訂單的編輯權。<br>您的修改已安全同步。</p>
-                        <button type="button" class="btn btn-primary w-100 fw-bold" onclick="window.location.reload()">我知道了，重新整理</button>
-                    </div>
-                </div>
-            `;
+                                <div id="takeover-notice" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;justify-content:center;align-items:center;">
+                                    <div class="bg-white p-5 rounded shadow-lg text-center" style="max-width:400px;">
+                                        <h3 class="text-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> 編輯權接管通知</h3>
+                                        <p class="mb-4">專員 <strong>[${newOwner}]</strong> 已取得此訂單的編輯權。<br>您的修改已安全同步。</p>
+                                        <button type="button" class="btn btn-primary w-100 fw-bold" onclick="window.location.reload()">我知道了，重新整理</button>
+                                    </div>
+                                </div>
+                            `;
                 $('body').append(modalHtml);
             }
 
             // 監聽：資料同步完成訊號 (當 A 存完，B 準備進場)
             connection.on("OnDataSynced", function (targetUser) {
                 if (targetUser === myName) {
-                    console.log("A 已完成同步，B 準備進場...");
-                    // ✨ 使用 autoEdit=true 讓 B 重整後直接變彩色編輯模式
-                    window.location.href = `/Order/Details?id=${orderId}&autoEdit=true`;
+                    console.log("A 已完成同步，B 執行搶單專用重整...");
+                    // ✨ 只有這裡會帶上通行證，讓 B 重整後直接變彩色編輯模式
+                    window.location.href = `/Order/Details?id=${orderId}&isTakeover=true`;
                 }
             });
 
@@ -273,18 +281,18 @@
 
             $("#btnEdit").click(function () {
                 const btn = $(this);
-                // 點擊瞬間先變更狀態，避免重複點擊
                 btn.prop("disabled", true).text("檢查中...");
 
                 $.post('/Order/TryStartEdit', { id: orderId, user: myName }, function (res) {
                     if (res.success) {
-                        enterEditMode();
+                        // ✨ 關鍵修正：B 取得權限後，不要直接 enterEditMode()
+                        // 而是帶上 isTakeover=true 參數重整頁面
+                        // 這樣 Details Action 就會重新從資料庫抓取 A 存好的 v2 資料
+                        window.location.href = `/Order/Details?id=${orderId}&isTakeover=true`;
                     } else if (res.isLocked) {
-                        // 有人在改，詢問是否搶奪
                         if (confirm(`【警告】專員 [${res.lockedBy}] 正在編輯中，是否強制搶奪編輯權？`)) {
-                            handleTakeoverRequest(btn); // 傳入按鈕物件以利控制
+                            handleTakeoverRequest(btn);
                         } else {
-                            // 取消搶單，恢復按鈕
                             btn.prop("disabled", false).html('<i class="bi bi-pencil-square me-1"></i> 編輯訂單');
                         }
                     } else {
@@ -352,6 +360,7 @@
                     if (res.success) {
                         initialFormData = $("#orderForm").serialize();
                         alert("暫存成功！");
+                        window.location.reload();
                     }
                 });
             });

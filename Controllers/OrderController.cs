@@ -68,9 +68,11 @@ public class OrderController : Controller
 
     // 1. 顯示訂單詳細頁面 (跳轉用)
     // 增加 autoEdit 參數，預設為 false
-    public IActionResult Details(string id, bool autoEdit = false)
+    public IActionResult Details(string id, bool isTakeover = false)
     {
+        // ✨ 修正 Bug 2：加入 .AsNoTracking() 確保不從快取讀取舊資料
         var order = _db.Orders.Include(o => o.OrderItems)
+                       .AsNoTracking()
                        .FirstOrDefault(o => o.OrderNumber == id);
 
         if (order == null) return NotFound();
@@ -80,9 +82,8 @@ public class OrderController : Controller
 
         bool isLockedByMe = !string.IsNullOrEmpty(dbLocker) && dbLocker == currentUser;
 
-        // ✨ 邏輯：只有剛搶完單(autoEdit=true)且鎖定權在我身上，進場才是彩色
-        // 平常手動重整，autoEdit 為 false，就會變回唯讀(灰色)
-        ViewBag.AutoStartEdit = autoEdit && isLockedByMe;
+        // 只有搶單過後的一瞬間才自動開啟
+        ViewBag.AutoStartEdit = isTakeover && isLockedByMe;
 
         bool isLockedByOthers = !string.IsNullOrEmpty(dbLocker) &&
                                 dbLocker != currentUser &&
