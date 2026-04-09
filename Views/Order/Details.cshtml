@@ -10,12 +10,6 @@
         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center p-3">
             <h4 class="mb-0"><i class="bi bi-gear-fill"></i> 訂單管理 - @Model.OrderNumber</h4>
 
-            @if (!isFinalized)
-            {
-                <button type="button" id="btnEdit" class="btn btn-light fw-bold shadow-sm">
-                    <i class="bi bi-pencil-square me-1"></i> 編輯訂單
-                </button>
-            }
         </div>
 
         <div class="card-body p-4 bg-white">
@@ -147,22 +141,38 @@
             </form>
 
             @* 底部動作列 *@
-            <div class="fixed-bottom bg-white border-top shadow-lg p-3 d-flex justify-content-center gap-3"
+            <div id="bottomActionBar"
+                class="fixed-bottom bg-white border-top shadow-lg p-3 d-flex justify-content-center gap-3"
                 style="z-index: 1050;">
-                @* 檢視模式按鈕 *@
-                <div id="viewModeGroup">
+
+                @* 左側狀態標籤 (絕對定位固定在左邊) *@
+                <div id="modeLabel" class="position-absolute start-0 top-50 translate-middle-y ms-4 fw-bold fs-5 text-view-mode">
+                    <i class="bi bi-eye-fill me-2"></i>檢視模式
+                </div>
+
+                @* 編輯按鈕 (獨立於 Group 之外，由 JS 控制狀態切換) *@
+                @if (!isFinalized)
+                {
+                    <button type="button" id="btnEdit" class="btn btn-primary px-5 fw-bold shadow-sm">
+                        <i class="bi bi-pencil-square me-1"></i> 編輯訂單
+                    </button>
+                }
+
+                @* 檢視模式專屬按鈕 (返回、列印) *@
+                <div id="viewModeGroup" class="d-flex gap-3">
                     <a href="/Home/DatabaseTest" class="btn btn-secondary px-5 fw-bold"><i
                             class="bi bi-arrow-left me-2"></i>返回列表</a>
-                    <button type="button" class="btn btn-outline-primary px-5 fw-bold" onclick="window.print()"><i
-                            class="bi bi-printer me-2"></i>列印</button>
                 </div>
-                @* 編輯模式按鈕 (預設隱藏) *@
-                <div id="editModeGroup" class="d-none">
+
+
+
+                @* 編輯模式專屬按鈕 (暫存、送出、取消) *@
+                <div id="editModeGroup" class="d-none d-flex gap-3">
                     <button type="button" id="btnSave" class="btn btn-warning px-5 fw-bold shadow-sm"><i
                             class="bi bi-save me-2"></i>暫存修改</button>
                     <button type="button" id="btnSubmit" class="btn btn-primary px-5 fw-bold shadow-sm"><i
                             class="bi bi-send-check me-2"></i>正式送出</button>
-                    <button type="button" class="btn btn-outline-secondary px-5 fw-bold"
+                    <button type="button" class="btn btn-outline-secondary px-5 fw-bold bg-white"
                         onclick="location.reload()">取消變更</button>
                 </div>
             </div>
@@ -185,26 +195,12 @@
             if ("@ViewBag.AutoStartEdit" === "True") {
                 enterEditMode();
                 // 使用 HTML5 History API 修改網址而不重整
-                // 這樣使用者之後手動按 F5，網址就沒有 isTakeover，會乖乖變回唯讀
                 if (window.location.search.indexOf('isTakeover=true') > -1) {
                     const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + "?id=" + orderId;
                     window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
                 }
             } else {
                 $(".edit-field").prop("disabled", true);
-            }
-
-            function showOverlay(message) {
-                // 移除可能已存在的 overlay
-                $("#takeover-overlay").remove();
-
-                const overlay = $(`
-                                        <div id="takeover-overlay" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);color:white;z-index:10000;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;">
-                                            <div class="spinner-border text-warning mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
-                                            <h3 class="fw-bold">${message}</h3>
-                                            <p class="text-light mt-2">請勿關閉視窗，系統正在確保您的變更已安全同步...</p>
-                                        </div>
-                                    `).appendTo('body');
             }
 
             // --- SignalR 初始化 ---
@@ -220,55 +216,30 @@
 
             // 監聽：有人搶單 (被踢掉)
             connection.on("OnTakeoverRequested", function (newOwner) {
-                if (newOwner === myName) return;
+                // 防呆：確保搶單者本人不會跑進這個邏輯
+                if (String(newOwner).trim().toLowerCase() === String(myName).trim().toLowerCase()) return;
 
                 isSafeExit = true; // 確保重整時不跳瀏覽器預設警告
 
-                // 1. A 執行自動儲存 (遺言存檔)
-                var formData = $("#orderForm").serialize();
-                $.ajax({
-                    url: '/Order/UpdateOrder',
-                    type: 'POST',
-                    data: formData,
-                    success: function () {
-                        // 2. ✨ 存檔成功後，立即正式轉移鎖定給 B
-                        $.post('/Order/FinalizeTakeover', { id: orderId, newOwner: newOwner }, function () {
-                            // 3. ✨ 關鍵：立即通知 B，讓他可以重整進場 (B 不用等 A 按確定)
-                            connection.invoke("NotifyTakeoverComplete", orderId, newOwner);
-
-                            // 4. ✨ 顯示一個不具「阻塞性」的視窗告知 A (例如用自定義的 HTML 或是簡單的 Confirm)
-                            // 這裡我們建立一個全螢幕遮罩，中間放一個按鈕讓 A 確認
-                            showTakeoverModal(newOwner);
-                        });
-                    }
-                });
+                // ✨ 直接顯示被搶單視窗，不再呼叫 UpdateOrder 存檔
+                showTakeoverModal(newOwner);
             });
 
             // A 被搶單時顯示的專用視窗
             function showTakeoverModal(newOwner) {
-                // 移除可能存在的舊遮罩
                 $("#takeover-notice").remove();
 
                 const modalHtml = `
-                                <div id="takeover-notice" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;justify-content:center;align-items:center;">
-                                    <div class="bg-white p-5 rounded shadow-lg text-center" style="max-width:400px;">
-                                        <h3 class="text-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> 編輯權接管通知</h3>
-                                        <p class="mb-4">專員 <strong>[${newOwner}]</strong> 已取得此訂單的編輯權。<br>您的修改已安全同步。</p>
-                                        <button type="button" class="btn btn-primary w-100 fw-bold" onclick="window.location.reload()">我知道了，重新整理</button>
-                                    </div>
-                                </div>
-                            `;
+                        <div id="takeover-notice" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;display:flex;justify-content:center;align-items:center;">
+                            <div class="bg-white p-5 rounded shadow-lg text-center" style="max-width:400px;">
+                                <h3 class="text-danger mb-3"><i class="bi bi-exclamation-triangle-fill"></i> 編輯權接管通知</h3>
+                                <p class="mb-4">專員 <strong>[${newOwner}]</strong> 已取得此訂單的編輯權。<br>您尚未暫存的變更已被捨棄。</p>
+                                <button type="button" class="btn btn-primary w-100 fw-bold" onclick="window.location.reload()">我知道了，重新整理</button>
+                            </div>
+                        </div>
+                    `;
                 $('body').append(modalHtml);
             }
-
-            // 監聽：資料同步完成訊號 (當 A 存完，B 準備進場)
-            connection.on("OnDataSynced", function (targetUser) {
-                if (targetUser === myName) {
-                    console.log("A 已完成同步，B 執行搶單專用重整...");
-                    // ✨ 只有這裡會帶上通行證，讓 B 重整後直接變彩色編輯模式
-                    window.location.href = `/Order/Details?id=${orderId}&isTakeover=true`;
-                }
-            });
 
             // 監聽：重複分頁
             connection.on("OnDuplicateTabDetected", function () {
@@ -280,17 +251,21 @@
             // --- 編輯控制邏輯 ---
 
             $("#btnEdit").click(function () {
+                // ✨ 新增：檢查使用者是否為空 (未登入或登入逾時)
+                if (!myName || myName.trim() === "") {
+                    alert("⚠️ 系統無法辨識您的身分 (可能登入已逾時)。請重新登入後再試！");
+                    window.location.reload(); // 或者導向登入頁面 login.html
+                    return; // 終止後續的 API 呼叫
+                }
                 const btn = $(this);
                 btn.prop("disabled", true).text("檢查中...");
 
                 $.post('/Order/TryStartEdit', { id: orderId, user: myName }, function (res) {
                     if (res.success) {
-                        // ✨ 關鍵修正：B 取得權限後，不要直接 enterEditMode()
-                        // 而是帶上 isTakeover=true 參數重整頁面
-                        // 這樣 Details Action 就會重新從資料庫抓取 A 存好的 v2 資料
                         window.location.href = `/Order/Details?id=${orderId}&isTakeover=true`;
                     } else if (res.isLocked) {
-                        if (confirm(`【警告】專員 [${res.lockedBy}] 正在編輯中，是否強制搶奪編輯權？`)) {
+                        // 文字微調，提醒使用者會捨棄對方資料
+                        if (confirm(`【警告】專員 [${res.lockedBy}] 正在編輯中，強制搶奪將捨棄對方的未暫存變更，是否繼續？`)) {
                             handleTakeoverRequest(btn);
                         } else {
                             btn.prop("disabled", false).html('<i class="bi bi-pencil-square me-1"></i> 編輯訂單');
@@ -302,42 +277,48 @@
                 });
             });
 
-            // 進入編輯模式的 UI 切換 (新增：按鈕變灰且改字)
+            // 進入編輯模式的 UI 切換
             function enterEditMode() {
                 isEditing = true;
 
-                // 1. 處理右上角編輯按鈕：反灰並改字
-                $("#btnEdit").prop("disabled", true)
-                    .removeClass("btn-light")
-                    .addClass("btn-secondary")
-                    .html('<i class="bi bi-lock-fill me-1"></i> 正在編輯');
-                $("#btnEdit").show(); // 確保它是顯示的但不能按
+                // 1. 切換底部 Bar 的背景顏色：深灰 -> 淺紅
+                $("#bottomActionBar").removeClass("bg-view-mode").addClass("bg-edit-mode");
 
-                // 2. 解除欄位禁用
+                // 2. 切換左側標籤的文字與顏色：檢視模式 -> 編輯模式
+                $("#modeLabel")
+                    .removeClass("text-view-mode")
+                    .addClass("text-edit-mode")
+                    .html('<i class="bi bi-pencil-fill me-2"></i>編輯模式');
+
+                // 3. 隱藏原本的編輯按鈕 (這是您這次要求的修改點 ✨)
+                $("#btnEdit").addClass("d-none"); 
+
+                // 4. 顯示編輯專用欄位與按鈕群組
                 $(".edit-field").prop("disabled", false);
-
-                // 3. 顯示功能按鈕與警語
                 $(".btn-remove-item, #btnAddItem, #editWarning").removeClass("d-none");
+                
+                // 隱藏檢視群組，顯示編輯群組 (三個按鈕)
                 $("#viewModeGroup").addClass("d-none");
                 $("#editModeGroup").removeClass("d-none");
 
-                // 4. 拍下快照
                 initialFormData = $("#orderForm").serialize();
             }
 
             function handleTakeoverRequest(editBtn) {
-                editBtn.prop("disabled", true).text("等待對方同步資料...");
+                editBtn.prop("disabled", true).html('<span class="spinner-border spinner-border-sm me-2"></span>處理中...');
 
                 $.post('/Order/RequestForceTakeover', { id: orderId, newOwner: myName }, function (res) {
-                    if (!res.success) {
+                    if (res.success) {
+                        // ✨ 後端已經把鎖強制過戶了，搶單者直接重整進場，不用等待！
+                        window.location.href = `/Order/Details?id=${orderId}&isTakeover=true`;
+                    } else {
                         alert("搶單失敗：" + res.message);
                         location.reload();
                     }
-                    // 這裡不需要寫 setTimeout，因為我們在上面監聽 OnDataSynced
                 });
             }
 
-            // --- 其他功能邏輯 (計算、新增、存檔) ---
+            // --- 其他功能邏輯 (計算、新增、存檔) 保持完全不變 ---
 
             $(document).on("input change", ".input-qty, .input-price", function () {
                 updateTotalAmount();
@@ -384,7 +365,6 @@
                 }
             });
 
-            // 離場自動解鎖
             window.addEventListener('pagehide', function () {
                 if (isEditing && !isSafeExit) {
                     navigator.sendBeacon('/Order/UnlockOrder?id=' + orderId);
@@ -413,8 +393,30 @@
         }
 
         .edit-field:disabled {
-            background-color: #f8f9fa !important;
-            color: #6c757d;
+            background-color: transparent !important; /* 移除灰底，改為透明 (或純白 #ffffff) */
+            color: #212529 !important; /* 把文字改回正常的深色，去掉反灰感 */
+            cursor: default; /* 把滑鼠游標從禁止符號 (not-allowed) 改回一般指標 */
+        }
+
+        /* 底部 Bar 的過場動畫 */
+        #bottomActionBar {
+            transition: background-color 0.3s ease;
+        }
+
+        /* === 檢視模式顏色 === */
+        bg-view-mode {
+            background-color: #dee2e6 !important; /* 加深一點的灰色 */
+        }
+        .text-view-mode {
+            color: #343a40 !important; /* 文字也可以稍微加深，確保對比度 */
+        }
+
+        /* === 編輯模式顏色 === */
+        .bg-edit-mode {
+            background-color: #f8d7da !important; /* 淺淺的紅色 (Bootstrap 警示紅) */
+        }
+        .text-edit-mode {
+            color: #842029 !important; /* 較深的紅色 */
         }
     </style>
 }

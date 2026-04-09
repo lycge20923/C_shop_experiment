@@ -78,6 +78,17 @@ public class OrderController : Controller
         if (order == null) return NotFound();
 
         string currentUser = Request.Cookies["TestUser"]?.Trim() ?? "";
+        if (string.IsNullOrEmpty(currentUser))
+        {
+            // 沒名字就給個亂數，並種下 Cookie，確保他後續搶單都有名字
+            currentUser = "User_" + Guid.NewGuid().ToString().Substring(0, 4);
+            Response.Cookies.Append("TestUser", currentUser, new CookieOptions
+            {
+                Expires = DateTime.Now.AddDays(1),
+                Path = "/"
+            });
+        }
+
         string dbLocker = WebUtility.HtmlDecode(order.LockedBy ?? "").Trim();
 
         bool isLockedByMe = !string.IsNullOrEmpty(dbLocker) && dbLocker == currentUser;
@@ -272,13 +283,18 @@ public class OrderController : Controller
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderNumber == id);
         if (order == null) return Json(new { success = false, message = "找不到訂單" });
 
-        // 在資料庫標記「有人想搶單」，這能防止 A 在背景存檔時死鎖
-        order.TakeoverRequestedBy = newOwner;
+        // ✨ 終極簡化：不需要標記 TakeoverRequestedBy 等待對方存檔了
+        // 直接「強制過戶」把編輯權給搶單者
+        order.LockedBy = newOwner;
+        order.LockedUntil = DateTime.Now.AddMinutes(5);
+        order.TakeoverRequestedBy = null; // 確保清空標記
+
         await _db.SaveChangesAsync();
 
-        // ✨ 透過 SignalR 通知目前在頁面上的所有人（主要是通知 A 存檔並退出）
+        // 廣播通知原本的編輯者 (A)，告訴他被踢了
         await _hubContext.Clients.Group(id).SendAsync("OnTakeoverRequested", newOwner);
 
+        // 回傳給搶單者 (B) 成功，讓他可以直接進場
         return Json(new { success = true });
     }
 
