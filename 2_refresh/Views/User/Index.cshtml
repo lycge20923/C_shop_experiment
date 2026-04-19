@@ -1,0 +1,30 @@
+@model IEnumerable<MyWebApp.Models.User>
+
+@{
+    ViewData["Title"] = "使用者清單";
+}
+
+<div class="container mt-5">
+    <h2>後台管理：使用者資料表</h2>
+    <p class="text-muted">這是目前存在記憶體資料庫中的所有帳號：</p>
+
+    <table class="table table-bordered table-striped mt-3">
+        <thead class="table-dark">
+            <tr>
+                <th>編號 (Id)</th>
+                <th>帳號 (Username)</th>
+                <th>密碼 (Password)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in Model)
+            {
+                <tr>
+                    <td>@user.Id</td>
+                    <td>@user.Username</td>
+                    <td>@user.Password</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

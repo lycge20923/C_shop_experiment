@@ -1,0 +1,32 @@
+@{
+    ViewData["Title"] = "建立新帳號";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-4">
+            <h2 class="text-center mb-4">建立新帳號</h2>
+            
+            @if (ViewBag.Error != null)
+            {
+                <div class="alert alert-danger">@ViewBag.Error</div>
+            }
+
+            <form method="post" action="/Register/Index">
+                <div class="mb-3">
+                    <label class="form-label">設定帳號</label>
+                    <input type="text" class="form-control" name="username" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">設定密碼</label>
+                    <input type="password" class="form-control" name="password" required>
+                </div>
+                <button type="submit" class="btn btn-success w-100 mb-3">註冊</button>
+                
+                <div class="text-center">
+                    <a asp-controller="Login" asp-action="Index" class="text-decoration-none">已經有帳號了？返回登入</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

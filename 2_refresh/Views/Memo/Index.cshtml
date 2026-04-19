@@ -1,0 +1,56 @@
+@model IEnumerable<MyWebApp.Models.Memo>
+
+@{
+    ViewData["Title"] = "共同備忘錄";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>📋 團隊共同備忘錄</h2>
+                <a asp-controller="Memo" asp-action="Create" class="btn btn-success fw-bold">
+                    ➕ 新增 Memo
+                </a>
+            </div>
+
+            <div class="card shadow-sm">
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 20%; padding-left: 20px;">訂單號碼</th>
+                                <th>訂單標題</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (!Model.Any())
+                            {
+                                <tr>
+                                    <td colspan="2" class="text-center text-muted py-4">目前還沒有任何備忘錄，趕快新增一筆吧！</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                foreach (var memo in Model)
+                                {
+                                    <tr>
+                                        <td style="padding-left: 20px;">
+                                            <a asp-controller="Memo" asp-action="Details" asp-route-id="@memo.Id"
+                                                target="_blank" class="badge bg-primary text-decoration-none p-2">
+                                                # @memo.Id 🔗
+                                            </a>
+                                        </td>
+                                        <td class="fw-bold">@memo.Title</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>

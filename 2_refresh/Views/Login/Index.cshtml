@@ -1,0 +1,38 @@
+@{
+    ViewData["Title"] = "登入系統";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-4">
+            <h2 class="text-center mb-4">系統登入</h2>
+            
+            @if (TempData["SuccessMessage"] != null)
+            {
+                <div class="alert alert-success">@TempData["SuccessMessage"]</div>
+            }
+
+            @if (ViewBag.Error != null)
+            {
+                <div class="alert alert-danger">@ViewBag.Error</div>
+            }
+
+            <form method="post" action="/Login/Index">
+                <div class="mb-3">
+                    <label class="form-label">帳號</label>
+                    <input type="text" class="form-control" name="username" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">密碼</label>
+                    <input type="password" class="form-control" name="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100 mb-3">登入</button>
+                
+                <div class="text-center">
+                    <span>還沒有帳號嗎？</span>
+                    <a asp-controller="Register" asp-action="Index" class="text-decoration-none fw-bold">建立新帳號</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

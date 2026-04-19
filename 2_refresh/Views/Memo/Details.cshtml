@@ -1,0 +1,167 @@
+@model MyWebApp.Models.Memo
+
+@{
+    ViewData["Title"] = $"備忘錄 #{Model.Id}";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            @if (TempData["ErrorMessage"] != null)
+            {
+                <div class="alert alert-danger fw-bold shadow-sm">
+                    ⚠️ @TempData["ErrorMessage"]
+                </div>
+            }
+            @if (TempData["SuccessMessage"] != null)
+            {
+                <div class="alert alert-success shadow-sm">
+                    ✅ @TempData["SuccessMessage"]
+                </div>
+            }
+            <div class="card shadow-sm border-primary">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">📄 備忘錄詳細資訊</h4>
+
+                    <div>
+                        <button id="btn-edit" class="btn btn-light btn-sm fw-bold" onclick="enterEditMode(@Model.Id)">
+                            ✏️ 進入編輯
+                        </button>
+                        <button id="btn-cancel" class="btn btn-danger btn-sm fw-bold d-none"
+                            onclick="cancelEditMode(@Model.Id)">
+                            ❌ 取消
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card-body py-4">
+                    <form asp-action="Edit" method="post" onsubmit="allowLeave()">
+                        <input type="hidden" name="id" value="@Model.Id" />
+
+                        <p class="text-muted mb-1">訂單號碼：</p>
+                        <h5 class="text-primary mb-4"># @Model.Id</h5>
+
+                        <p class="text-muted mb-1">訂單內容：</p>
+
+                        <div id="view-mode">
+                            <h3 class="fw-bold">@Model.Title</h3>
+                        </div>
+
+                        <div id="edit-mode" class="d-none">
+                            <input type="text" name="title" class="form-control form-control-lg mb-3"
+                                value="@Model.Title" required>
+                            <button type="submit" class="btn btn-success w-100">💾 儲存變更</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card-footer bg-light d-flex justify-content-between">
+                    <a asp-action="Index" class="btn btn-outline-secondary">返回列表</a>
+                    <button onclick="window.close()" class="btn btn-secondary">關閉分頁</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        let originalContent = '';      
+        let isEditing = false;         
+        let bypassWarning = false;     
+        const memoId = @Model.Id; // 從後端取得當前的訂單 ID
+
+        // ==========================================
+        // 【新增】網頁載入完成時，檢查是否要「自動恢復編輯模式」
+        // ==========================================
+        window.onload = async function() {
+            // 檢查 sessionStorage 中是否有我們留下的記號
+            const shouldResume = sessionStorage.getItem('editingMemo_' + memoId);
+            
+            if (shouldResume === 'true') {
+                // 如果有記號，代表他是按了重新整理，我們自動幫他呼叫進入編輯
+                // 第三個參數 true 代表這是「自動恢復」，不需要跳出不必要的警告
+                await enterEditMode(memoId, false, true); 
+            }
+        };
+
+        // ==========================================
+        // 1. 進入編輯 (或自動恢復編輯)
+        // ==========================================
+        async function enterEditMode(id, force = false, isAutoResume = false) {
+            const url = `/Memo/TryLock/${id}?force=${force}`;
+            const response = await fetch(url, { method: 'POST' });
+            const result = await response.json();
+
+            if (result.success) {
+                // 搶鎖成功 / 恢復成功，切換 UI
+                document.getElementById('view-mode').classList.add('d-none');
+                document.getElementById('edit-mode').classList.remove('d-none');
+                document.getElementById('btn-edit').classList.add('d-none');
+                document.getElementById('btn-cancel').classList.remove('d-none');
+
+                isEditing = true;
+                bypassWarning = false;
+                originalContent = document.querySelector('input[name="title"]').value;
+
+                // 【關鍵】在分頁記憶體中寫下記號，這樣 F5 重整後才認得
+                sessionStorage.setItem('editingMemo_' + id, 'true');
+
+            } else if (result.requireConfirm && !isAutoResume) {
+                // 如果遇到衝突，且不是系統自動恢復的，才跳出搶奪警告
+                if (confirm(result.message)) {
+                    enterEditMode(id, true);
+                } else {
+                    sessionStorage.removeItem('editingMemo_' + id); // 放棄搶奪，清除記號
+                }
+            } else {
+                if (!isAutoResume) alert(result.message);
+                sessionStorage.removeItem('editingMemo_' + id);
+            }
+        }
+
+        // ==========================================
+        // 2. 取消編輯
+        // ==========================================
+        async function cancelEditMode(id) {
+            bypassWarning = true;
+            isEditing = false;
+            
+            // 【關鍵】取消編輯時，清除分頁記號
+            sessionStorage.removeItem('editingMemo_' + id);
+
+            await fetch(`/Memo/Unlock/${id}`, { method: 'POST' });
+            
+            document.querySelector('input[name="title"]').value = originalContent;
+            document.getElementById('view-mode').classList.remove('d-none');
+            document.getElementById('edit-mode').classList.add('d-none');
+            document.getElementById('btn-edit').classList.remove('d-none');
+            document.getElementById('btn-cancel').classList.add('d-none');
+        }
+
+        // ==========================================
+        // 3. 儲存表單 (合法離開)
+        // ==========================================
+        function allowLeave() {
+            bypassWarning = true; 
+            // 【關鍵】儲存完畢後，清除分頁記號，這樣跳轉後才不會又自動進入編輯
+            sessionStorage.removeItem('editingMemo_' + memoId);
+        }
+
+        // ==========================================
+        // 4. 攔截不合法的離開 (重整或關閉分頁)
+        // ==========================================
+        window.addEventListener('beforeunload', function (e) {
+            if (isEditing && !bypassWarning) {
+                const currentContent = document.querySelector('input[name="title"]').value;
+                
+                // 只有「內容被修改過」才會攔截並跳出警告
+                if (currentContent !== originalContent) {
+                    e.preventDefault(); 
+                    e.returnValue = ''; 
+                }
+            }
+        });
+    </script>
+}

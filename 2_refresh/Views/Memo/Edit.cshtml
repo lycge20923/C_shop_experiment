@@ -1,0 +1,31 @@
+@model MyWebApp.Models.Memo
+
+@{
+    ViewData["Title"] = "編輯備忘錄";
+}
+
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <h2 class="mb-4">✏️ 編輯備忘錄 #@Model.Id</h2>
+
+            <div class="card shadow-sm border-warning">
+                <div class="card-body">
+                    <form method="post" asp-action="Edit">
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        
+                        <div class="mb-3">
+                            <label class="form-label text-muted">修改標題內容</label>
+                            <input type="text" class="form-control form-control-lg" name="title" value="@Model.Title" required autofocus>
+                        </div>
+                        
+                        <div class="d-flex justify-content-end mt-4">
+                            <a asp-action="Details" asp-route-id="@Model.Id" class="btn btn-outline-secondary me-2">取消修改</a>
+                            <button type="submit" class="btn btn-warning">儲存變更</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
