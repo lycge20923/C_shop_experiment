@@ -47,16 +47,18 @@ namespace MyWebApp.Controllers
         [HttpGet]
         public IActionResult Details(int id)
         {
-            // 根據網址傳來的 id，去資料庫尋找符合的第一筆資料
             var memo = _db.Memos.FirstOrDefault(m => m.Id == id);
+            if (memo == null) return RedirectToAction("Index");
 
-            // 如果找不到這筆資料（例如使用者亂改網址），就導向回清單頁面
-            if (memo == null)
-            {
-                return RedirectToAction("Index");
-            }
+            // 【新增】檢查目前資料庫的鎖，是不是屬於「當下這個使用者」的？
+            var currentUser = User.Identity.Name;
+            var lockRecord = _db.MemoLocks.FirstOrDefault(l => l.MemoId == id);
 
-            // 把找到的單筆 memo 資料傳遞給畫面
+            bool isLockedByMe = (lockRecord != null && lockRecord.IsEditing && lockRecord.EditorUsername == currentUser);
+
+            // 把這個布林值存進 ViewBag，讓 HTML 可以讀取到
+            ViewBag.IsLockedByMe = isLockedByMe;
+
             return View(memo);
         }
         // 5. 顯示編輯頁面 (GET: /Memo/Edit/5)
