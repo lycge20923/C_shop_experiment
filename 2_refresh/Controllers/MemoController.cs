@@ -71,7 +71,7 @@ namespace MyWebApp.Controllers
             return View(memo); // 把找到的資料傳給編輯頁面
         }
 
-        // 6. 接收修改後的資料 (POST: /Memo/Edit/5)
+        // 2. 【修改】原本的 Edit 方法 (加入 Save 的紀錄)
         [HttpPost]
         public IActionResult Edit(int id, string title)
         {
@@ -79,25 +79,28 @@ namespace MyWebApp.Controllers
             var currentUser = User.Identity.Name;
             var lockRecord = _db.MemoLocks.FirstOrDefault(l => l.MemoId == id);
 
-            // 【新增防線】：如果鎖的紀錄不見了、沒在上鎖狀態、或是編輯者「不是自己」(被搶走了)
             if (lockRecord == null || !lockRecord.IsEditing || lockRecord.EditorUsername != currentUser)
             {
-                // 儲存失敗！把錯誤訊息塞進 TempData，稍後在畫面上顯示
-                var currentOwner = lockRecord?.EditorUsername ?? "其他人";
-                TempData["ErrorMessage"] = $"儲存失敗！【{currentOwner}】目前為最終編輯者，您先前的編輯內容已失效。";
-
-                // 把他踢回唯讀畫面
+                TempData["ErrorMessage"] = $"儲存失敗！目前鎖定狀態異常。";
                 return RedirectToAction("Details", new { id = id });
             }
 
-            // 如果鎖還在自己身上，正常存檔並解鎖
             if (memo != null && !string.IsNullOrWhiteSpace(title))
             {
                 memo.Title = title;
                 lockRecord.IsEditing = false;
                 lockRecord.EditorUsername = null;
-                _db.SaveChanges();
 
+                // 【新增】：在成功修改資料庫的這一刻，寫入 Save 紀錄
+                _db.MemoLogs.Add(new MemoLog
+                {
+                    MemoId = id,
+                    Username = currentUser,
+                    Action = "saved",
+                    Timestamp = DateTime.Now
+                });
+
+                _db.SaveChanges();
                 TempData["SuccessMessage"] = "儲存成功！";
             }
 
@@ -152,5 +155,56 @@ namespace MyWebApp.Controllers
             }
             return Json(new { success = true });
         }
+
+        // ==============================================================================
+        // 給 LLM 的架構提示：
+        // 1. 這裡實作了「後端日誌合併 (Log Consolidation)」機制。
+        // 2. 因為瀏覽器的 pagehide 無法區分「關閉」或「重整」，前端一律先發送 "closed"。
+        // 3. 若前端隨後發送 "refreshed"，後端會尋找 10 秒內的 "closed" 日誌並將其覆蓋。
+        // 4. 注意：API 參數名稱必須使用 `actionType`，絕對不能使用 `action`，以避免與 ASP.NET Core MVC 的系統保留字發生衝突。
+        // ==============================================================================
+        [HttpPost]
+        public IActionResult RecordLog(int id, string actionType)
+        {
+            var currentUser = User.Identity.Name ?? "System";
+
+            // ==========================================
+            // 【核心魔法：日誌合併】如果是重整，去改寫剛剛那筆 closed
+            // ==========================================
+            if (actionType == "refreshed")
+            {
+                // 定義一個「寬限期」，例如過去 10 秒內的日誌
+                var recentTimeLimit = DateTime.Now.AddSeconds(-10);
+
+                // 找出這個訂單、這個使用者，最新的一筆日誌
+                var lastLog = _db.MemoLogs
+                    .OrderByDescending(l => l.Timestamp)
+                    .FirstOrDefault(l => l.MemoId == id && l.Username == currentUser);
+
+                // 如果最新的一筆剛好是 "closed"，且發生在幾秒鐘前
+                if (lastLog != null && lastLog.Action == "closed" && lastLog.Timestamp >= recentTimeLimit)
+                {
+                    // 直接把原本的 closed 改成 refreshed！(不會產生新紀錄)
+                    lastLog.Action = "refreshed";
+                    lastLog.Timestamp = DateTime.Now; // 更新時間點
+                    _db.SaveChanges();
+
+                    return Json(new { success = true });
+                }
+            }
+
+            // 如果不是 refreshed，或者是真的關閉太久才重開，就正常新增一筆
+            _db.MemoLogs.Add(new MemoLog
+            {
+                MemoId = id,
+                Username = currentUser,
+                Action = actionType,
+                Timestamp = DateTime.Now
+            });
+
+            _db.SaveChanges();
+            return Json(new { success = true });
+        }
+
     }
 }

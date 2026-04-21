@@ -11,5 +11,7 @@ namespace MyWebApp.Models
         // 新增這一行：讓資料庫知道我們要多一張名為 Memos 的資料表
         public DbSet<Memo> Memos { get; set; } 
         public DbSet<MemoLock> MemoLocks { get; set; }
+
+        public DbSet<MemoLog> MemoLogs { get; set; }
     }
 }
