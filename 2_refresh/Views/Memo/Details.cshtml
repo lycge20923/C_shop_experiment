@@ -8,17 +8,16 @@
     <div class="row justify-content-center">
         <div class="col-md-6">
             @* 訊息提示區 ... (保持原樣) *@
-            
+
             <div class="card shadow-sm border-primary">
                 <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
                     <h4 class="mb-0">📄 備忘錄詳細資訊</h4>
                     <div>
-                        <button id="btn-edit" class="btn btn-light btn-sm fw-bold" 
-                                onclick="MemoController.enterEditMode(@Model.Id)">
+                        <button id="btn-edit" class="btn btn-light btn-sm fw-bold">
                             ✏️ 進入編輯
                         </button>
-                        <button id="btn-cancel" class="btn btn-danger btn-sm fw-bold d-none"
-                                onclick="MemoController.cancelEditMode(@Model.Id)">
+
+                        <button id="btn-cancel" class="btn btn-danger btn-sm fw-bold d-none">
                             ❌ 取消
                         </button>
                     </div>
@@ -27,6 +26,8 @@
                 <div class="card-body py-4">
                     <form asp-action="Edit" method="post" onsubmit="MemoController.allowLeave()">
                         <input type="hidden" name="id" value="@Model.Id" />
+
+                        <input type="hidden" id="log-start-time" name="startTime" value="" />
                         <p class="text-muted mb-1">訂單號碼：# @Model.Id</p>
 
                         <div id="view-mode">
@@ -35,7 +36,7 @@
 
                         <div id="edit-mode" class="d-none">
                             <input type="text" name="title" class="form-control form-control-lg mb-3"
-                                   value="@Model.Title" required>
+                                value="@Model.Title" required>
                             <button type="submit" class="btn btn-success w-100">💾 儲存變更</button>
                         </div>
                     </form>
@@ -47,14 +48,26 @@
 </div>
 
 <script src="~/js/memo-details.js" asp-append-version="true"></script>
+
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
-        
-        // 從 ViewBag 讀取後端傳來的布林值，轉成 JS 的 true / false
-        // 使用 .ToString().ToLower() 確保 C# 的 "True" 會變成 JS 的 "true"
+    // 2. 不要用 import，直接使用 memoController 實例
+    document.addEventListener("DOMContentLoaded", function () {
         var isLockedByMe = @(ViewBag.IsLockedByMe.ToString().ToLower());
-        
-        // 把 ID 和 狀態 一起傳給 Controller
-        MemoController.init(@Model.Id, isLockedByMe);
+
+        if (typeof memoController !== 'undefined') {
+            memoController.init(@Model.Id, isLockedByMe);
+        }
+
+        // ✏️ 點擊編輯：直接呼叫進入編輯模式的私有方法 (需改為公開或透過中介)
+        // 為了安全與架構，建議在 MemoController 增加一個公開方法：
+        document.getElementById('btn-edit').addEventListener('click', function () {
+            // 我們在 JS Class 裡補一個 startEdit() 公開方法來呼叫 #enterEditMode
+            memoController.startEdit();
+        });
+
+        // ❌ 點擊取消
+        document.getElementById('btn-cancel').addEventListener('click', function () {
+            memoController.cancelEdit(); // 呼叫公開的取消方法
+        });
     });
 </script>

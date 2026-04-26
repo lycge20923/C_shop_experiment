@@ -19,8 +19,9 @@ namespace MyWebApp.Controllers
         [HttpGet]
         public IActionResult Index()
         {
-            var allMemos = _db.Memos.ToList();
-            return View(allMemos);
+            // 這裡應該是撈取 Memos 表格
+            var memos = _db.Memos.ToList();
+            return View(memos);
         }
 
         // 2. 【新增的】顯示填寫 Memo 的空白表單頁面 (GET)
@@ -73,7 +74,7 @@ namespace MyWebApp.Controllers
 
         // 2. 【修改】原本的 Edit 方法 (加入 Save 的紀錄)
         [HttpPost]
-        public IActionResult Edit(int id, string title)
+        public IActionResult Edit(int id, string title, DateTime startTime)
         {
             var memo = _db.Memos.FirstOrDefault(m => m.Id == id);
             var currentUser = User.Identity.Name;
@@ -89,23 +90,22 @@ namespace MyWebApp.Controllers
             {
                 memo.Title = title;
                 lockRecord.IsEditing = false;
-                lockRecord.EditorUsername = null;
 
-                // 【新增】：在成功修改資料庫的這一刻，寫入 Save 紀錄
+                // 【新增】：存入 saved 的 Session 紀錄
                 _db.MemoLogs.Add(new MemoLog
                 {
                     MemoId = id,
-                    Username = currentUser,
+                    Username = User.Identity.Name,
                     Action = "saved",
-                    Timestamp = DateTime.Now
+                    StartTime = startTime,
+                    EndTime = DateTime.Now
                 });
 
                 _db.SaveChanges();
-                TempData["SuccessMessage"] = "儲存成功！";
             }
-
             return RedirectToAction("Details", new { id = id });
         }
+
         // 【新增】嘗試上鎖 API (給 JavaScript 呼叫)
         [HttpPost]
         public IActionResult TryLock(int id, bool force = false)
@@ -164,45 +164,49 @@ namespace MyWebApp.Controllers
         // 4. 注意：API 參數名稱必須使用 `actionType`，絕對不能使用 `action`，以避免與 ASP.NET Core MVC 的系統保留字發生衝突。
         // ==============================================================================
         [HttpPost]
-        public IActionResult RecordLog(int id, string actionType)
+        public IActionResult RecordLog(int id, string actionType, DateTime startTime)
         {
-            var currentUser = User.Identity.Name ?? "System";
-
-            // ==========================================
-            // 【核心魔法：日誌合併】如果是重整，去改寫剛剛那筆 closed
-            // ==========================================
-            if (actionType == "refreshed")
-            {
-                // 定義一個「寬限期」，例如過去 10 秒內的日誌
-                var recentTimeLimit = DateTime.Now.AddSeconds(-10);
-
-                // 找出這個訂單、這個使用者，最新的一筆日誌
-                var lastLog = _db.MemoLogs
-                    .OrderByDescending(l => l.Timestamp)
-                    .FirstOrDefault(l => l.MemoId == id && l.Username == currentUser);
-
-                // 如果最新的一筆剛好是 "closed"，且發生在幾秒鐘前
-                if (lastLog != null && lastLog.Action == "closed" && lastLog.Timestamp >= recentTimeLimit)
-                {
-                    // 直接把原本的 closed 改成 refreshed！(不會產生新紀錄)
-                    lastLog.Action = "refreshed";
-                    lastLog.Timestamp = DateTime.Now; // 更新時間點
-                    _db.SaveChanges();
-
-                    return Json(new { success = true });
-                }
-            }
-
-            // 如果不是 refreshed，或者是真的關閉太久才重開，就正常新增一筆
             _db.MemoLogs.Add(new MemoLog
             {
                 MemoId = id,
-                Username = currentUser,
-                Action = actionType,
-                Timestamp = DateTime.Now
+                Username = User.Identity.Name ?? "System",
+                Action = actionType, // 這裡會收到 "closed"
+                StartTime = startTime,
+                EndTime = DateTime.Now // 結束時間就是現在
             });
 
             _db.SaveChanges();
+            return Json(new { success = true });
+        }
+        // 1. 開門：建立一筆 EndTime 為空的紀錄
+        [HttpPost]
+        public IActionResult StartLog(int id)
+        {
+            var newLog = new MemoLog
+            {
+                MemoId = id,
+                Username = User.Identity.Name,
+                Action = "editing", // 狀態設為進行中
+                StartTime = DateTime.Now,
+                EndTime = null
+            };
+            _db.MemoLogs.Add(newLog);
+            _db.SaveChanges();
+
+            return Json(new { logId = newLog.Id }); // 把 Id 給前端，這很重要！
+        }
+
+        // 2. 關門：補上結束時間
+        [HttpPost]
+        public IActionResult FinishLog(int logId, string actionType)
+        {
+            var log = _db.MemoLogs.Find(logId);
+            if (log != null)
+            {
+                log.Action = actionType; // 改成 "closed" 或 "saved"
+                log.EndTime = DateTime.Now;
+                _db.SaveChanges();
+            }
             return Json(new { success = true });
         }
 
